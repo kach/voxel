@@ -3,6 +3,7 @@
 ;   time csi -q -b -r5rs-syntax voxel.scm
 ;   time racket -q -I r5rs -e '(load "voxel.scm")'
 
+(use srfi-1)
 
 ; I'm applying for a villain loan. I go by the name of Vector. It's a
 ; mathematical term, represented by an arrow with both direction and magnitude.
@@ -48,6 +49,11 @@
 (define (vec/ a x)
   (vec* a (/ 1 x)))
 
+
+(define (vec-point from to)
+    (vec- to from))
+
+
 (define (vec-dot v w)
   (+
     (* (vec-x v) (vec-x w))
@@ -61,7 +67,7 @@
   (sqrt (vec-norm v)))
 
 (define (vec-normalize v)
-  (vec/ v (sqrt (vec-len v))))
+  (vec/ v (vec-len v)))
 
 (define (vec-resize v x)
   (vec* (vec-normalize v) x))
@@ -69,7 +75,7 @@
 (define (vec-angle v w)
   (acos (/ (vec-dot v w) (* (vec-len v) (vec-len w)))))
 
-(define (vec-proj v w)
+(define (vec-project v w)
   (vec-resize w (vec-dot v (vec-normalize w))))
 
 
@@ -86,32 +92,52 @@
 
 (define (color->string c)
   (list
-    (floor (* 255 (color-b c)))
-    (floor (* 255 (color-g c)))
-    (floor (* 255 (color-r c)))
+    (min 255 (floor (* 255 (color-b c))))
+    (min 255 (floor (* 255 (color-g c))))
+    (min 255 (floor (* 255 (color-r c))))
     ))
 
 (define color-white (color 1 1 1))
 (define color-black (color 0 0 0))
+
+(define (color* x y)
+  (color
+    (* (color-r x) (color-r y))
+    (* (color-g x) (color-g y))
+    (* (color-b x) (color-b y))))
+
+(define (color% c x)
+  (color
+    (* (color-r c) x)
+    (* (color-g c) x)
+    (* (color-b c) x)))
+
+(define (color+ x y)
+  (color
+    (+ (color-r x) (color-r y))
+    (+ (color-g x) (color-g y))
+    (+ (color-b x) (color-b y))))
 
 ; "Because I'm not normal," I said.
 ; "You say that as if it's a bad thing, Percy. But you don't realize how
 ; important you are." 
 ;   -- Rick Riordan, The Lightning Thief
 
-(define (square pos size normal)
+(define (square pos size normal material)
   (define (intersect x v)
     (define (query axis)
       (let* ((diff (- (axis pos) (axis x)))
              (ratio (/ diff (axis v)))
              (newlen (* (vec-len v) ratio))
-             (newpos (vec+ x (vec-resize v newlen))))
+;            (newpos (vec+ x (vec-resize v newlen)))
+             (newpos (vec+ x (vec* v ratio)))
+             )
         (and
           (positive? newlen)
-;         (> size (abs (- (vec-x pos) (vec-x newpos))))
-;         (> size (abs (- (vec-y pos) (vec-y newpos))))
-;         (> size (abs (- (vec-z pos) (vec-z newpos))))
-          (> size (vec-len (vec- pos newpos)))
+          (> size (abs (- (vec-x pos) (vec-x newpos))))
+          (> size (abs (- (vec-y pos) (vec-y newpos))))
+          (> size (abs (- (vec-z pos) (vec-z newpos))))
+;         (> (* 1 size) (vec-len (vec- pos newpos)))
           newlen)))
 
     (cond
@@ -126,22 +152,52 @@
 
   (define (dispatch msg)
     (cond
-      ((eq? msg 'intersect) intersect)))
+      ((eq? msg 'intersect) intersect)
+      ((eq? msg 'normal) normal)
+      ((eq? msg 'material) material)
+      ))
   dispatch)
+
+(define (material reflectivity lambert phong shininess)
+  (define (dispatch msg)
+    (cond
+      ((eq? msg 'reflectivity) reflectivity)
+      ((eq? msg 'lambert) lambert)
+      ((eq? msg 'phong) phong)
+      ((eq? msg 'shininess) shininess)))
+  dispatch)
+
+(define material-metal
+  (material (color 1.0 1.0 1.0)
+            (color 0.2 0.2 0.2)
+            (color 1.0 1.0 1.0)
+            5))
+(define material-plastic
+  (material (color 0.0 0.0 0.0)
+            (color 0.2 0.2 1.0)
+            (color 1.0 1.0 1.0)
+            5))
 
 ; The Cube is an imitation of life itself - or even an improvement on life.
 ;   -- Erno Rubik
 
-(define (make-voxel pos size)
+(define (make-voxel pos size material)
   (list
-    (square (vec+ pos (vec-resize vec-i size)) size vec-i)
-    (square (vec- pos (vec-resize vec-i size)) size vec-i)
-    (square (vec+ pos (vec-resize vec-j size)) size vec-j)
-    (square (vec- pos (vec-resize vec-j size)) size vec-j)
-    (square (vec+ pos (vec-resize vec-k size)) size vec-k)
-    (square (vec- pos (vec-resize vec-k size)) size vec-k)
+    (square (vec+ pos (vec-resize vec-i size)) size vec-i material)
+    (square (vec- pos (vec-resize vec-i size)) size vec-i material)
+    (square (vec+ pos (vec-resize vec-j size)) size vec-j material)
+    (square (vec- pos (vec-resize vec-j size)) size vec-j material)
+    (square (vec+ pos (vec-resize vec-k size)) size vec-k material)
+    (square (vec- pos (vec-resize vec-k size)) size vec-k material)
     ))
 
+
+(define (point-light pos color)
+  (define (dispatch msg)
+    (cond
+      ((eq? msg 'position) pos)
+      ((eq? msg 'color) color)))
+  dispatch)
 
 ; Bitmaps!
 
@@ -231,6 +287,10 @@
        (range -0.3 0.3 0.002)))
 
 
+; "Stuff your eyes with wonder, he said, live as if you'd drop dead in ten
+; seconds. See the world. It's more fantastic than any dream made or paid for
+; in factories."
+;   -- Ray Bradbury, Fahrenheit 451
 
 (define (ray-get-intersection pos dir objects)
   (define intersections
@@ -251,19 +311,108 @@
   (define min-intersection (get-min-intersection intersections (cons #f #f)))
   min-intersection)
 
+(define (ray-trace pos dir objects lights depth)
+  (define intersection (ray-get-intersection pos dir objects))
+  (define object (cdr intersection))
+
+  (if (not object) color-black
+    (let ()
+      (define reflect-pos
+        (vec+ pos (vec-resize dir (car intersection))))
+      (define reflect-dir
+        (vec+ dir (vec* (vec-project dir (object 'normal)) -2)))
+
+      (define reflect-color
+        (if (or (= depth 0)
+                (equal? ((object 'material) 'reflectivity)
+                        color-black))
+          color-black
+          (color*
+            ((object 'material) 'reflectivity)
+            (ray-trace
+              reflect-pos
+              reflect-dir
+              (delete
+                object
+                objects)
+              lights
+              (- depth 1)))))
+
+      (define shade-color
+        (foldl
+          color+ color-black
+          (map
+            (lambda (light)
+              (define light-dir
+                (vec-point reflect-pos (light 'position)))
+              (define light-dir-refl
+                (vec+ (vec-- light-dir)
+                      (vec* (vec-project
+                              (vec-- light-dir)
+                              (object 'normal))
+                            -2)))
+              (define shadow-ixn
+                (ray-get-intersection
+                  reflect-pos
+                  light-dir
+                  (delete
+                    object
+                    objects)))
+              (if (and (car shadow-ixn)
+                       (< (car shadow-ixn) (vec-len light-dir)))
+                color-black
+                (let ()
+                  (define normal (object 'normal))
+                  (define lambert-intensity
+                    (abs
+                      (vec-dot (vec-normalize light-dir)
+                               (vec-normalize normal))))
+                  (define lambert (color% (light 'color) lambert-intensity))
+                  (define phong-intensity
+                    (max 
+                      0
+                      (expt (vec-dot
+                              (vec-normalize light-dir-refl)
+                              (vec-normalize (vec-- dir)))
+                            ((object 'material) 'shininess))))
+                  (define phong (color% (light 'color) phong-intensity))
+
+                  (color+
+                    (color* lambert ((object 'material) 'lambert))
+                    (color* phong   ((object 'material) 'phong)))
+                  )))
+            lights)))
+
+
+      (color+ reflect-color shade-color)
+;     shade-color
+      )))
+
 (define objects
   (append
-;   (make-voxel (vec -8 9 0) 10)
-    (make-voxel (vec  0  0 24) 2)
-    (make-voxel (vec  4  4 20) 2)
-    (make-voxel (vec -4 -4 20) 2)
+    (list (square (vec 0 3  18) 20 vec-j material-plastic)) ; ground
+;   (make-voxel (vec  0  0 18) 2 material-metal)
+    (make-voxel (vec  4  0 14) 2 material-metal)
+    (make-voxel (vec -4  0 14) 2 material-metal)
     ))
 
+(define lights
+  (list
+    (point-light (vec  0   0 14) (color 0.2 0.2 0.2))
+    (point-light (vec  0   0 0) (color 0.2 0.2 0.2))
+;   (point-light (vec -9  -9 10) (color 0 1 0))
+;   (point-light (vec -8  -8 10) (color 0 0 1))
+    ))
+
+
+;(define (get-pixel pos dir)
+;  (define r (ray-get-intersection pos dir objects))
+;  (if (car r)
+;    (color 0 (expt 0.91 (car r)) 0)
+;    color-black))
+
 (define (get-pixel pos dir)
-  (define r (ray-get-intersection pos dir objects))
-  (if (car r)
-    (color 0 (expt 0.9 (car r)) 0)
-    color-black))
+    (ray-trace pos dir objects lights 2))
 
 
 
