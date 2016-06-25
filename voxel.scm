@@ -3,8 +3,6 @@
 ;   time csi -q -b -r5rs-syntax voxel.scm
 ;   time racket -q -I r5rs -e '(load "voxel.scm")'
 
-(use srfi-1)
-
 ; I'm applying for a villain loan. I go by the name of Vector. It's a
 ; mathematical term, represented by an arrow with both direction and magnitude.
 ; Vector! That's me, because I commit crimes with both direction and magnitude.
@@ -78,6 +76,41 @@
 (define (vec-project v w)
   (vec-resize w (vec-dot v (vec-normalize w))))
 
+(define pi 3.14159265359)
+
+(define (// x y)
+    (/ x (if (= y 0) 0.0000001 y)))
+
+(define (atan2 y x)
+  (define atan1 (atan (// y x)))
+  (cond [(> x 0) atan1]
+        [(> y 0) (- pi atan1)]
+        [(< y 0) (- (- pi) atan1)]
+        [(< x 0) (+ pi atan1)]))
+
+(define (vec-rot-x v theta)
+  (define alpha (atan2 (vec-z v) (vec-y v)))
+  (define beta  (+ alpha theta))
+  (define len (sqrt (+ (expt (vec-y v) 2) (expt (vec-z v) 2))))
+  (define new-y (* (cos beta) len))
+  (define new-z (* (sin beta) len))
+  (vec (vec-x v) new-y new-z))
+
+(define (vec-rot-y v theta)
+  (define alpha (atan2 (vec-z v) (vec-x v)))
+  (define beta  (+ alpha theta))
+  (define len (sqrt (+ (expt (vec-x v) 2) (expt (vec-z v) 2))))
+  (define new-x (* (cos beta) len))
+  (define new-z (* (sin beta) len))
+  (vec new-x (vec-y v) new-z))
+
+(define (vec-rot-z v theta)
+  (define alpha (atan2 (vec-y v) (vec-x v)))
+  (define beta  (+ alpha theta))
+  (define len (sqrt (+ (expt (vec-x v) 2) (expt (vec-y v) 2))))
+  (define new-x (* (cos beta) len))
+  (define new-y (* (sin beta) len))
+  (vec new-x new-y (vec-z v)))
 
 ; "Clouds come floating into my life, no longer to carry rain or usher storm,
 ; but to add color to my sunset sky."
@@ -123,13 +156,16 @@
 ; important you are." 
 ;   -- Rick Riordan, The Lightning Thief
 
+
 (define (square pos size normal material)
+  (define (nz x)
+    (if (= x 0) 0.000001 x))
   (define (intersect x v)
     (define (query axis)
       (let* ((diff (- (axis pos) (axis x)))
-             (ratio (/ diff (axis v)))
+             (ratio (/ diff (nz (axis v))))
              (newlen (* (vec-len v) ratio))
-;            (newpos (vec+ x (vec-resize v newlen)))
+             ;            (newpos (vec+ x (vec-resize v newlen)))
              (newpos (vec+ x (vec* v ratio)))
              )
         (and
@@ -137,7 +173,7 @@
           (> size (abs (- (vec-x pos) (vec-x newpos))))
           (> size (abs (- (vec-y pos) (vec-y newpos))))
           (> size (abs (- (vec-z pos) (vec-z newpos))))
-;         (> (* 1 size) (vec-len (vec- pos newpos)))
+          ;         (> (* 1 size) (vec-len (vec- pos newpos)))
           newlen)))
 
     (cond
@@ -272,20 +308,6 @@
 
 
 
-; And now some actual rendering fun
-(define (range from to step)
-  (if (> from to)
-    '()
-    (cons from
-          (range (+ from step) to step))))
-
-(define (shiny-image get-pixel)
-  (map (lambda (y)
-         (map (lambda (x)
-                (get-pixel (vec 0 0 0) (vec (asin x) (asin y) 1)))
-              (range -0.5 0.5 0.002)))
-       (range -0.3 0.3 0.002)))
-
 
 ; "Stuff your eyes with wonder, he said, live as if you'd drop dead in ten
 ; seconds. See the world. It's more fantastic than any dream made or paid for
@@ -385,46 +407,68 @@
 
 
       (color+ reflect-color shade-color)
-;     shade-color
       )))
 
-(define objects
-  (append
-    (list (square (vec 0 3  18) 20 vec-j material-plastic)) ; ground
-;   (make-voxel (vec  0  0 18) 2 material-metal)
-    (make-voxel (vec  4  0 14) 2 material-metal)
-    (make-voxel (vec -4  0 14) 2 material-metal)
-    ))
-
-(define lights
-  (list
-    (point-light (vec  0   0 14) (color 0.2 0.2 0.2))
-    (point-light (vec  0   0 0) (color 0.2 0.2 0.2))
-;   (point-light (vec -9  -9 10) (color 0 1 0))
-;   (point-light (vec -8  -8 10) (color 0 0 1))
-    ))
 
 
-;(define (get-pixel pos dir)
-;  (define r (ray-get-intersection pos dir objects))
-;  (if (car r)
-;    (color 0 (expt 0.91 (car r)) 0)
-;    color-black))
+
+
+
+
+
+
+
+
+
+
+
+
+
+; This is my sandbox. MINE.
+(define (range from to step)
+  (if (> from to)
+    '()
+    (cons from
+          (range (+ from step) to step))))
+
+(define (shiny-image get-pixel)
+  (define camera-pos (vec 0 0 0))
+  (map (lambda (y)
+         (map (lambda (x)
+                (get-pixel
+                  camera-pos
+                  (vec (asin x) (asin y) 1)))
+              (range -0.5 0.5 0.002)))
+       (range -0.3 0.3 0.002)))
 
 (define (get-pixel pos dir)
     (ray-trace pos dir objects lights 2))
 
 
 
+(define objects
+  (append
+    (list (square (vec 0 2  18) 20 vec-j material-metal)) ; ground
+    (list (square (vec 0 2  20) 20 vec-k material-metal)) ; wall
+    ;   (apply append
+    ;       (map
+    ;           (lambda (x)
+    ;               (make-voxel
+    ;                   (vec (modulo (* 2 x) 5) (+ 1 (modulo (* 2 x) 4)) x)
+    ;                   0.5 material-plastic))
+    ;           (range 10 20 1)))
 
+    (map
+      (lambda (x)
+        (square (vec x 1 8) 0.7 vec-i material-plastic))
+      (range -3 3 0.2))
+    ))
 
-(define (chicken-echo-bytes b)
-  (display
-    (list->string
-      (map integer->char
-           (map inexact->exact b)))))
+(define lights
+  (list
+    (point-light (vec   0.1  0  14) (color 0.1 0.1 0.1))
+    (point-light (vec  -0.1  0  14) (color 0.1 0.1 0.1))
+    (point-light (vec  0   0 0)     (color 0.2 0.2 0.2))
+    ))
 
-(define (racket-echo-bytes b)
-    (for-each write-byte (map inexact->exact b)))
-
-(chicken-echo-bytes (bmp-create (shiny-image get-pixel)))
+(echo-bytes (bmp-create (shiny-image get-pixel)))
