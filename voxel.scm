@@ -443,6 +443,8 @@
 
 
 
+; Believe it or not, Stanford has a CT scan of their bunny.
+; http://graphics.stanford.edu/data/voldata/voldata.html#bunny
 (define objects
   (append
     (list (square (vec 0 2  18) 20 vec-j material-metal)) ; ground
