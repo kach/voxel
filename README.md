@@ -18,3 +18,7 @@ Stanford Bunny online. This is what you get if you approximate it with a
 hundred voxels:
 
 ![Here's a bunny](bunny.png)
+
+For comparison, here's some output from my old (December 2012) raytracer:
+
+![Here's a sphere](sphere.png)
